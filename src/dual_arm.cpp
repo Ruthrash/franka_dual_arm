@@ -12,6 +12,8 @@
 
 #include <fstream>
 #include <franka/rate_limiting.h>
+#include <mutex>
+std::mutex m;
 
 namespace dualarm{
   std::vector<std::array<double, 7>> left_arm_traj; 
@@ -22,39 +24,8 @@ namespace dualarm{
 const double print_rate = 10.0;
 std::atomic_bool left_running{true};
 std::atomic_bool right_running{true};
-
-// franka::JointPositions left_joint_pos_motion_generator(const franka::RobotState&robot_state, franka::Duration period, int index){
-  
-//   franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-//   if(dualarm::left_time_step + int(1000*period.toSec())>= dualarm::left_arm_traj.size()){
-//     return franka::MotionFinished(output);
-//     //output = dualarm::left_arm_traj[dualarm::left_time_step];
-//   }
-//   else{
-//     dualarm::left_time_step += int(1000*period.toSec());
-//     output = dualarm::left_arm_traj[dualarm::left_time_step];
-//     dualarm::left_time_step++;
-//   }
-//   return output;   
-// }
-
-
-// franka::JointPositions right_joint_pos_motion_generator(const franka::RobotState&robot_state, franka::Duration period){                                   
-//   franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-//   if(dualarm::right_time_step + int(1000*period.toSec())>= dualarm::right_arm_traj.size()){
-//     return franka::MotionFinished(output);
-//     //output = dualarm::right_arm_traj[dualarm::right_time_step];
-//   }
-//   else{
-//     dualarm::right_time_step += int(1000*period.toSec());
-//     output = dualarm::right_arm_traj[dualarm::right_time_step];
-//     //dualarm::left_time_step++;
-//   }
-//   return output;   
-// }
-
-
-
+    const std::array<double, 7> joint_min = {{-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973}};
+    const std::array<double, 7> joint_max = {{2.8973, 1.7628 	, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973}};
 
 std::vector<std::array<double, 7>> parse_file(std::string file_name){
 
@@ -63,12 +34,14 @@ std::vector<std::array<double, 7>> parse_file(std::string file_name){
   std::string str;
 
   bool first = true; 
+  int line = 0 ;
   while(std::getline(file,str)){
     if(first){
       first = false; 
       continue;
     }
     if(!first){
+      line++;
       std::array<double, 7> j_position = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}}; 
       int i = 0; 
       std::stringstream ss(str);
@@ -76,13 +49,21 @@ std::vector<std::array<double, 7>> parse_file(std::string file_name){
         std::string substr;
         getline(ss, substr, ',');
         j_position[i] = std::stof(substr);
+        // if(j_position[i] >= joint_max[i] ||j_position[i] <= joint_min[i] )
+        // {
+        //   std::cout<<"joint limits violated \n";
+        //   std::cout<<"in file "<<file_name<<"\n";
+        //   std::cout<<"in line"<<line<<"\n";
+        //   std::cout<<"in joint"<<i+1<<"\n";
+        //   std::cout<<"value"<<j_position[i] <<"\n";
+        //   exit(0);
+        // }
+          
         i++;
       }
-      // std::cout<<j_position[0]<<","<<j_position[1]<<","<<j_position[2]<<","<<j_position[3]<<","<<j_position[4]<<","<<j_position[5]<<","<<j_position[6]<<"\n";
       output.push_back(j_position);
     }
   }  
-  //std::cout<<"length of traj"<<output.size()<<"\n";
   return output;
 }
 
@@ -94,23 +75,28 @@ void run(){
             print_data_right.robot_state = robot_state;
             print_data_right.mutex.unlock();
           }  
-        franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-        if(dualarm::right_time_step >= dualarm::right_arm_traj.size()){
+        // 
+        if(dualarm::right_time_step >= dualarm::right_arm_traj.size()-1){
+          franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
           right_running = false; 
           return franka::MotionFinished(output);
         }
         else{
-          dualarm::right_time_step += int(1000*period.toSec());
-          output = dualarm::right_arm_traj[dualarm::right_time_step];
+          if(m.try_lock()){
+            dualarm::right_time_step += int(1000*period.toSec());
+            m.unlock();
+          }
+            
+          return dualarm::right_arm_traj[dualarm::right_time_step];
         }
-        return output;          
+          
         });
 }
 
 int main(int argc, char** argv) {
 
-  std::string right_traj_file_name = "/home/pairlab/franka_dual_arm/traj_right.txt";
-  std::string left_traj_file_name = "/home/pairlab/franka_dual_arm/traj_left.txt";
+  std::string right_traj_file_name = "/home/pairlab/franka_dual_arm/traj/traj_right.txt";
+  std::string left_traj_file_name = "/home/pairlab/franka_dual_arm/traj/traj_left.txt";
   dualarm::right_arm_traj =  parse_file(right_traj_file_name);
   dualarm::left_arm_traj =  parse_file(left_traj_file_name);
 
@@ -130,34 +116,39 @@ int main(int argc, char** argv) {
     MotionGenerator motionGenerator_(0.2, qRest);
     robot_right.control(motionGenerator_);
 
-    std::string file_name_left = "/home/pairlab/franka_dual_arm/log.txt";  
-    std::string file_name_right = "/home/pairlab/franka_dual_arm/log.txt";  
+    std::string file_name_left = "/home/pairlab/franka_dual_arm/log_left.txt";  
+    std::string file_name_right = "/home/pairlab/franka_dual_arm/log_right.txt";  
 
     bool log_joint_space=true;
     std::thread print_thread_left = std::thread(log_data, std::cref(print_rate), std::ref(print_data_left), std::ref(left_running), std::ref(file_name_left), std::cref(log_joint_space));
     std::thread print_thread_right= std::thread(log_data, std::cref(print_rate), std::ref(print_data_right), std::ref(right_running), std::ref(file_name_right), std::cref(log_joint_space));
 
     std::thread t1(&run);
-    //robot_left.control(left_joint_pos_motion_generator);
+    
     robot_left.control(  [&](const franka::RobotState&robot_state, franka::Duration period) -> franka::JointPositions {     
           if (print_data_left.mutex.try_lock()) {
             print_data_left.has_data = true;
             print_data_left.robot_state = robot_state;
             print_data_left.mutex.unlock();
           }  
-        franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-        if(dualarm::left_time_step >= dualarm::left_arm_traj.size()){
+        // 
+        if(dualarm::left_time_step >= dualarm::left_arm_traj.size()-1){
+          franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
           left_running = false; 
           return franka::MotionFinished(output);
         }
         else{
           dualarm::left_time_step += int(1000*period.toSec());
-          output = dualarm::left_arm_traj[dualarm::left_time_step];
-        }
-        return output;          
-        });    
-    t1.join();
+          return dualarm::left_arm_traj[dualarm::left_time_step];
+          
+        }       
+        });  
+    if(m.try_lock()){
+      std::cout<<dualarm::right_time_step<<"\n";
+      m.unlock();
+    }
 
+    t1.join();
     if (print_thread_left.joinable()) {
       print_thread_left.join();
     }     
