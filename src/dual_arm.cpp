@@ -48,16 +48,16 @@ std::vector<std::array<double, 7>> parse_file(std::string file_name){
       while (ss.good()) {
         std::string substr;
         getline(ss, substr, ',');
-        j_position[i] = std::stof(substr);
-        // if(j_position[i] >= joint_max[i] ||j_position[i] <= joint_min[i] )
-        // {
-        //   std::cout<<"joint limits violated \n";
-        //   std::cout<<"in file "<<file_name<<"\n";
-        //   std::cout<<"in line"<<line<<"\n";
-        //   std::cout<<"in joint"<<i+1<<"\n";
-        //   std::cout<<"value"<<j_position[i] <<"\n";
-        //   exit(0);
-        // }
+        j_position[i] = std::stod(substr);
+        if(j_position[i] >= joint_max[i] ||j_position[i] <= joint_min[i] )
+        {
+          std::cout<<"joint limits violated \n";
+          std::cout<<"in file "<<file_name<<"\n";
+          std::cout<<"in line"<<line<<"\n";
+          std::cout<<"in joint"<<i+1<<"\n";
+          std::cout<<"value"<<j_position[i] <<"\n";
+          exit(0);
+        }
           
         i++;
       }
@@ -68,6 +68,7 @@ std::vector<std::array<double, 7>> parse_file(std::string file_name){
 }
 
 void run(){
+  try {//control loop for right arm
     franka::Robot robot_right("192.168.2.109");
     robot_right.control(  [&](const franka::RobotState&robot_state, franka::Duration period) -> franka::JointPositions {     
           if (print_data_right.mutex.try_lock()) {
@@ -76,21 +77,31 @@ void run(){
             print_data_right.mutex.unlock();
           }  
         // 
-        if(dualarm::right_time_step >= dualarm::right_arm_traj.size()-1){
+        if(dualarm::right_time_step >= dualarm::right_arm_traj.size()){
           franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
           right_running = false; 
           return franka::MotionFinished(output);
         }
         else{
+          // std::array<double, 7> desired_j_pos_limited = franka::limitRate(franka::kMaxJointVelocity,
+          //                                                       franka::kMaxJointAcceleration, 
+          //                                                       franka::kMaxJointJerk,
+          //                                                       dualarm::right_arm_traj[dualarm::right_time_step],
+          //                                                       robot_state.q_d,
+          //                                                       robot_state.dq_d,
+          //                                                       robot_state.ddq_d); 
+          std::array<double, 7> output = dualarm::right_arm_traj[dualarm::right_time_step];
           if(m.try_lock()){
             dualarm::right_time_step += int(1000*period.toSec());
             m.unlock();
           }
-            
-          return dualarm::right_arm_traj[dualarm::right_time_step];
-        }
-          
-        });
+          return output;
+          //return desired_j_pos_limited; 
+        }});
+  }catch (franka::Exception const& e) {
+    std::cout<<"last time step"<<dualarm::right_time_step;
+    std::cout << e.what() << std::endl;
+  }
 }
 
 int main(int argc, char** argv) {
@@ -121,6 +132,7 @@ int main(int argc, char** argv) {
 
     bool log_joint_space=true;
     std::thread print_thread_left = std::thread(log_data, std::cref(print_rate), std::ref(print_data_left), std::ref(left_running), std::ref(file_name_left), std::cref(log_joint_space));
+
     std::thread print_thread_right= std::thread(log_data, std::cref(print_rate), std::ref(print_data_right), std::ref(right_running), std::ref(file_name_right), std::cref(log_joint_space));
 
     std::thread t1(&run);
@@ -138,9 +150,9 @@ int main(int argc, char** argv) {
           return franka::MotionFinished(output);
         }
         else{
+          franka::JointPositions output = dualarm::left_arm_traj[dualarm::left_time_step];
           dualarm::left_time_step += int(1000*period.toSec());
-          return dualarm::left_arm_traj[dualarm::left_time_step];
-          
+          return output;
         }       
         });  
     if(m.try_lock()){
@@ -148,13 +160,14 @@ int main(int argc, char** argv) {
       m.unlock();
     }
 
-    t1.join();
+   
     if (print_thread_left.joinable()) {
       print_thread_left.join();
     }     
     if (print_thread_right.joinable()) {
       print_thread_right.join();
-    }     
+    }
+    t1.join();     
 
   } catch (franka::Exception const& e) {
     std::cout << e.what() << std::endl;
