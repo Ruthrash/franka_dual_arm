@@ -13,6 +13,7 @@
 #include <fstream>
 #include <franka/rate_limiting.h>
 #include <mutex>
+#include <franka/gripper.h>
 std::mutex m;
 
 namespace dualarm{
@@ -65,6 +66,41 @@ std::vector<std::array<double, 7>> parse_file(std::string file_name){
     }
   }  
   return output;
+}
+
+void gripper_left(const std::string &robot_ip, const int &gripper_close_timestep, const double &grasp_width, int gripper_open_timestep =-1 ){
+  franka::Gripper left_gripper(robot_ip);
+  left_gripper.homing();
+  if(m.try_lock()){
+    std::cout<<"lol";
+    return;     
+    //dualarm::right_time_step += int(1000*period.toSec());
+    if((gripper_close_timestep != -1) && (dualarm::left_time_step >= gripper_open_timestep) ){
+      left_gripper.grasp(0.08, 0.1, 50); //width, speed, force
+    }
+    else if(dualarm::left_time_step >= gripper_close_timestep){
+      left_gripper.grasp(grasp_width, 0.1, 80); //width, speed, force
+    }
+    m.unlock();
+  }
+
+}
+
+void gripper_right(const std::string &robot_ip, const int &gripper_close_timestep, const double &grasp_width, int gripper_open_timestep =-1){
+  franka::Gripper right_gripper(robot_ip);
+  right_gripper.homing();
+  if(m.try_lock()){
+    std::cout<<"lol";
+    return; 
+    //dualarm::right_time_step += int(1000*period.toSec());
+    if((gripper_close_timestep != -1) && (dualarm::right_time_step >= gripper_open_timestep) ){
+      right_gripper.grasp(0.08, 0.1, 50); //width, speed, force
+    }
+    else if(dualarm::left_time_step >= gripper_close_timestep){
+      right_gripper.grasp(grasp_width, 0.1, 80); //width, speed, force
+    }
+    m.unlock();
+  }
 }
 
 void run(){
@@ -126,7 +162,7 @@ int main(int argc, char** argv) {
     qRest = dualarm::right_arm_traj.front();
     MotionGenerator motionGenerator_(0.2, qRest);
     robot_right.control(motionGenerator_);
-
+    // exit(-1);
     std::string file_name_left = "/home/pairlab/franka_dual_arm/log_left.txt";  
     std::string file_name_right = "/home/pairlab/franka_dual_arm/log_right.txt";  
 
@@ -134,6 +170,14 @@ int main(int argc, char** argv) {
     std::thread print_thread_left = std::thread(log_data, std::cref(print_rate), std::ref(print_data_left), std::ref(left_running), std::ref(file_name_left), std::cref(log_joint_space));
 
     std::thread print_thread_right= std::thread(log_data, std::cref(print_rate), std::ref(print_data_right), std::ref(right_running), std::ref(file_name_right), std::cref(log_joint_space));
+
+    std::string right_robot_ip = "192.168.2.109", left_robot_ip = "192.168.1.107";
+    int grasp_time_step = 17200; 
+    int open_time_step = 36530;
+    double grasp_width = 0.024;
+
+    // std::thread gripper_thread_left = std::thread(gripper_left, std::cref(right_robot_ip), std::cref(grasp_time_step), std::cref(grasp_width), std::ref(open_time_step)); 
+    // std::thread gripper_thread_right = std::thread(gripper_right, std::cref(left_robot_ip), std::cref(grasp_time_step), std::cref(grasp_width), std::ref(open_time_step)); 
 
     std::thread t1(&run);
     
@@ -167,7 +211,14 @@ int main(int argc, char** argv) {
     if (print_thread_right.joinable()) {
       print_thread_right.join();
     }
-    t1.join();     
+    t1.join(); 
+
+    // if(gripper_thread_left.joinable()) {
+    // gripper_thread_left.join();
+    // }    
+    // if(gripper_thread_right.joinable()) {
+    // gripper_thread_right.join();
+    // }        
 
   } catch (franka::Exception const& e) {
     std::cout << e.what() << std::endl;
