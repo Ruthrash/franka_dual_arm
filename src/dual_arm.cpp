@@ -14,6 +14,7 @@
 #include <franka/rate_limiting.h>
 #include <mutex>
 #include <franka/gripper.h>
+#include <chrono>         // std::chrono::seconds
 std::mutex m;
 
 namespace dualarm{
@@ -21,10 +22,11 @@ namespace dualarm{
   std::vector<std::array<double, 7>> right_arm_traj; 
   int left_time_step = 0; 
   int right_time_step = 0; 
+  std::atomic_bool left_running{true};
+  std::atomic_bool right_running{true};  
 }
 const double print_rate = 10.0;
-std::atomic_bool left_running{true};
-std::atomic_bool right_running{true};
+
     const std::array<double, 7> joint_min = {{-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973}};
     const std::array<double, 7> joint_max = {{2.8973, 1.7628 	, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973}};
 
@@ -71,41 +73,71 @@ std::vector<std::array<double, 7>> parse_file(std::string file_name){
 void gripper_left(const std::string &robot_ip, const int &gripper_close_timestep, const double &grasp_width, int gripper_open_timestep =-1 ){
   franka::Gripper left_gripper(robot_ip);
   left_gripper.homing();
-  if(m.try_lock()){
-    std::cout<<"lol";
-    return;     
-    //dualarm::right_time_step += int(1000*period.toSec());
-    if((gripper_close_timestep != -1) && (dualarm::left_time_step >= gripper_open_timestep) ){
-      left_gripper.grasp(0.08, 0.1, 50); //width, speed, force
+  bool grasp = false;
+  while(dualarm::left_running){
+    //if(m.try_lock()){
+      //dualarm::right_time_step += int(1000*period.toSec());
+    try{
+      if((gripper_close_timestep != -1) && (dualarm::left_time_step >= gripper_open_timestep) ){
+        //std::cout<<"yes\n";
+        left_gripper.move(0.08, 0.1); //width, speed, force
+      }
+      else if(dualarm::left_time_step >= gripper_close_timestep && !grasp){
+        //std::cout<<"no\n";
+        grasp = left_gripper.grasp(grasp_width, 0.1, 80,0.005,0.005); //width, speed, force
+      }
     }
-    else if(dualarm::left_time_step >= gripper_close_timestep){
-      left_gripper.grasp(grasp_width, 0.1, 80); //width, speed, force
+    catch (franka::Exception const& e) {
+    std::cout << e.what() << std::endl;
     }
-    m.unlock();
+    std::this_thread::sleep_for (std::chrono::milliseconds(500));
+    //  m.unlock();
+    // }
+    // else
+    //   std::cout<<"didn't get lock gripper_left \n";
   }
+  left_gripper.move(0.08, 0.1); //width, speed, force
+  left_gripper.stop();
 
 }
 
 void gripper_right(const std::string &robot_ip, const int &gripper_close_timestep, const double &grasp_width, int gripper_open_timestep =-1){
   franka::Gripper right_gripper(robot_ip);
   right_gripper.homing();
-  if(m.try_lock()){
-    std::cout<<"lol";
-    return; 
-    //dualarm::right_time_step += int(1000*period.toSec());
-    if((gripper_close_timestep != -1) && (dualarm::right_time_step >= gripper_open_timestep) ){
-      right_gripper.grasp(0.08, 0.1, 50); //width, speed, force
+  bool grasp = false;
+  while(dualarm::right_running){
+    try{
+    //std::cout<<dualarm::right_time_step;
+    //if(m.try_lock()){
+      //dualarm::right_time_step += int(1000*period.toSec());
+      if((gripper_close_timestep != -1) && (dualarm::right_time_step >= gripper_open_timestep) ){
+        right_gripper.move(0.08, 0.1); //width, speed, force
+      }
+      else if(dualarm::left_time_step >= gripper_close_timestep && !grasp){
+        grasp = right_gripper.grasp(grasp_width, 0.1, 80,0.005,0.005); //width, speed, force
+      }
     }
-    else if(dualarm::left_time_step >= gripper_close_timestep){
-      right_gripper.grasp(grasp_width, 0.1, 80); //width, speed, force
+    catch (franka::Exception const& e) {
+    std::cout << e.what() << std::endl;
     }
-    m.unlock();
+    std::this_thread::sleep_for (std::chrono::milliseconds(500));      
+    //  m.unlock();
+    // }
+    // else
+    //   std::cout<<"didn't get lock gripper_right \n";  
   }
+  right_gripper.move(0.08, 0.1);  //width, speed, force
+  right_gripper.stop();
+
 }
 
 void run(){
   try {//control loop for right arm
     franka::Robot robot_right("192.168.2.109");
+    robot_right.setCollisionBehavior({{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});    
     robot_right.control(  [&](const franka::RobotState&robot_state, franka::Duration period) -> franka::JointPositions {     
           if (print_data_right.mutex.try_lock()) {
             print_data_right.has_data = true;
@@ -115,7 +147,7 @@ void run(){
         // 
         if(dualarm::right_time_step >= dualarm::right_arm_traj.size()){
           franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-          right_running = false; 
+          dualarm::right_running = false; 
           return franka::MotionFinished(output);
         }
         else{
@@ -127,10 +159,10 @@ void run(){
           //                                                       robot_state.dq_d,
           //                                                       robot_state.ddq_d); 
           std::array<double, 7> output = dualarm::right_arm_traj[dualarm::right_time_step];
-          if(m.try_lock()){
+          // if(m.try_lock()){
             dualarm::right_time_step += int(1000*period.toSec());
-            m.unlock();
-          }
+          //   m.unlock();
+          // }
           return output;
           //return desired_j_pos_limited; 
         }});
@@ -167,20 +199,23 @@ int main(int argc, char** argv) {
     std::string file_name_right = "/home/pairlab/franka_dual_arm/log_right.txt";  
 
     bool log_joint_space=true;
-    std::thread print_thread_left = std::thread(log_data, std::cref(print_rate), std::ref(print_data_left), std::ref(left_running), std::ref(file_name_left), std::cref(log_joint_space));
+    std::thread print_thread_left = std::thread(log_data, std::cref(print_rate), std::ref(print_data_left), std::ref(dualarm::left_running), std::ref(file_name_left), std::cref(log_joint_space));
 
-    std::thread print_thread_right= std::thread(log_data, std::cref(print_rate), std::ref(print_data_right), std::ref(right_running), std::ref(file_name_right), std::cref(log_joint_space));
+    std::thread print_thread_right= std::thread(log_data, std::cref(print_rate), std::ref(print_data_right), std::ref(dualarm::right_running), std::ref(file_name_right), std::cref(log_joint_space));
 
     std::string right_robot_ip = "192.168.2.109", left_robot_ip = "192.168.1.107";
     int grasp_time_step = 17200; 
     int open_time_step = 36530;
-    double grasp_width = 0.024;
+    double grasp_width = 0.025;
 
-    // std::thread gripper_thread_left = std::thread(gripper_left, std::cref(right_robot_ip), std::cref(grasp_time_step), std::cref(grasp_width), std::ref(open_time_step)); 
-    // std::thread gripper_thread_right = std::thread(gripper_right, std::cref(left_robot_ip), std::cref(grasp_time_step), std::cref(grasp_width), std::ref(open_time_step)); 
+    std::thread gripper_thread_left = std::thread(gripper_left, std::cref(left_robot_ip), std::cref(grasp_time_step), std::cref(grasp_width), std::ref(open_time_step)); 
+    std::thread gripper_thread_right = std::thread(gripper_right, std::cref(right_robot_ip), std::cref(grasp_time_step), std::cref(grasp_width), std::ref(open_time_step)); 
 
     std::thread t1(&run);
-    
+    robot_left.setCollisionBehavior({{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}},
+                               {{100.0, 100.0, 100.0, 100.0, 100.0, 100.0}});
     robot_left.control(  [&](const franka::RobotState&robot_state, franka::Duration period) -> franka::JointPositions {     
           if (print_data_left.mutex.try_lock()) {
             print_data_left.has_data = true;
@@ -190,19 +225,20 @@ int main(int argc, char** argv) {
         // 
         if(dualarm::left_time_step >= dualarm::left_arm_traj.size()-1){
           franka::JointPositions output = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-          left_running = false; 
+          dualarm::left_running = false; 
           return franka::MotionFinished(output);
         }
         else{
-          franka::JointPositions output = dualarm::left_arm_traj[dualarm::left_time_step];
+          franka::JointPositions output = dualarm::left_arm_traj[dualarm::left_time_step];          
+          // if(m.try_lock()){          
+          //franka::JointPositions output = dualarm::left_arm_traj[dualarm::left_time_step];
           dualarm::left_time_step += int(1000*period.toSec());
+          // m.unlock();
+          // }
           return output;
         }       
         });  
-    if(m.try_lock()){
-      std::cout<<dualarm::right_time_step<<"\n";
-      m.unlock();
-    }
+
 
    
     if (print_thread_left.joinable()) {
@@ -213,12 +249,12 @@ int main(int argc, char** argv) {
     }
     t1.join(); 
 
-    // if(gripper_thread_left.joinable()) {
-    // gripper_thread_left.join();
-    // }    
-    // if(gripper_thread_right.joinable()) {
-    // gripper_thread_right.join();
-    // }        
+    if(gripper_thread_left.joinable()) {
+    gripper_thread_left.join();
+    }    
+    if(gripper_thread_right.joinable()) {
+    gripper_thread_right.join();
+    }        
 
   } catch (franka::Exception const& e) {
     std::cout << e.what() << std::endl;
