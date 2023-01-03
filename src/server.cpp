@@ -147,6 +147,9 @@ int main () {
         }
         int res = 0;
         std::string command = std::string(static_cast<char *>(request[0].data()), request[0].size());
+        if (command == ("ping")) {
+            res = 0;
+        }
         if (command == "init_both")
         {
             res = api_init_both();
