@@ -6,7 +6,7 @@
 #include <franka/robot.h>
 #include <franka/gripper.h>
 #include <franka/rate_limiting.h>
-#include "common.cpp"
+#include "common.h"
 
 namespace dualarm{
   double grasp_width = 0.025;
