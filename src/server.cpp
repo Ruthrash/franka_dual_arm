@@ -14,14 +14,15 @@ std::vector<double> vector_from_message(zmq::message_t &msg) {
     return data;
 }
 
-void api_move_one (std::string arm, std::vector<double> traj) {
+int api_move_one (std::string arm, std::vector<double> traj) {
+    int status = 0;
     // the traj vector contains a flattened joint space
     // trajectory sampled at 1Khz
     // arm is one of ["left_panda", "right_panda"]
 
     // we want to move the arm along the desired trajectory
     // before returning to the caller
-    std::cout << "move_one " << arm << " ";
+    std::cout << "move_one " << arm << std::endl;
 
     std::string robot_ip;
     if (arm == "left_panda")
@@ -31,29 +32,33 @@ void api_move_one (std::string arm, std::vector<double> traj) {
 
     std::vector<std::array<double, 7>> *traj_mat = reinterpret_cast<std::vector<std::array<double, 7>> *>(&traj);
 
-    std::thread move_thread = std::thread(move, std::cref(robot_ip), std::cref(*traj_mat));
+    std::thread move_thread = std::thread(move, std::cref(robot_ip), std::cref(*traj_mat), std::ref(status));
     move_thread.join();
     
-    std::cout << "done move_one " << arm << " ";
+    std::cout << "done move_one " << arm << std::endl;
+    return status;
 
 }
-void api_move_both (std::vector<double> left_traj, std::vector<double> right_traj) {
+int api_move_both (std::vector<double> left_traj, std::vector<double> right_traj) {
+    int status = 0;
     // this may not be a good impl because there's no explicit sync.
     // if so, we switch to a single time keeping mechanism
-    std::cout << "move_both " << " ";
+    std::cout << "move_both " << std::endl;
     std::vector<std::array<double, 7>> *traj_mat_left = reinterpret_cast<std::vector<std::array<double, 7>> *>(&left_traj);
     std::vector<std::array<double, 7>> *traj_mat_right = reinterpret_cast<std::vector<std::array<double, 7>> *>(&right_traj);
 
-    std::thread gripper_thread_left = std::thread(move, std::cref(dualarm::left_ip), std::cref(*traj_mat_left));
-    std::thread gripper_thread_right = std::thread(move, std::cref(dualarm::right_ip), std::cref(*traj_mat_right));
+    std::thread gripper_thread_left = std::thread(move, std::cref(dualarm::left_ip), std::cref(*traj_mat_left), std::ref(status));
+    std::thread gripper_thread_right = std::thread(move, std::cref(dualarm::right_ip), std::cref(*traj_mat_right), std::ref(status));
     gripper_thread_left.join();
     gripper_thread_right.join();
 
-    std::cout << "done move_both " << " ";
+    std::cout << "done move_both " << std::endl;
+    return status;
 }
 
-void api_grasp_one (std::string arm) {
-    std::cout << "grasp_one " << arm << " ";
+int api_grasp_one (std::string arm) {
+    int status = 0;
+    std::cout << "grasp_one " << arm << std::endl;
 
     std::string robot_ip;
     if (arm == "left_panda")
@@ -61,14 +66,16 @@ void api_grasp_one (std::string arm) {
     else
         robot_ip = dualarm::right_ip;
 
-    std::thread gripper_thread = std::thread(grasp, std::cref(robot_ip));
+    std::thread gripper_thread = std::thread(grasp, std::cref(robot_ip), std::ref(status));
     gripper_thread.join();
 
-    std::cout << "done grasp_one " << arm << " ";
+    std::cout << "done grasp_one " << arm << std::endl;
+    return status;
 }
 
-void api_release_one (std::string arm) {
-    std::cout << "release_one " << arm << " ";
+int api_release_one (std::string arm) {
+    int status = 0;
+    std::cout << "release_one " << arm << std::endl;
 
     std::string robot_ip;
     if (arm == "left_panda")
@@ -76,41 +83,49 @@ void api_release_one (std::string arm) {
     else
         robot_ip = dualarm::right_ip;
 
-    std::thread gripper_thread = std::thread(release, std::cref(robot_ip));
+    std::thread gripper_thread = std::thread(release, std::cref(robot_ip), std::ref(status));
     gripper_thread.join();
 
-    std::cout << "done release_one " << arm << " ";
+    std::cout << "done release_one " << arm << std::endl;
+    return status;
 }
 
-void api_grasp_both () {
-    std::cout << "grasp_both " << " ";
+int api_grasp_both () {
+    int status = 0;
+    std::cout << "grasp_both " << std::endl;
 
-    std::thread gripper_thread_left = std::thread(grasp, std::cref(dualarm::left_ip));
-    std::thread gripper_thread_right = std::thread(grasp, std::cref(dualarm::right_ip));
+    std::thread gripper_thread_left = std::thread(grasp, std::cref(dualarm::left_ip), std::ref(status));
+    std::thread gripper_thread_right = std::thread(grasp, std::cref(dualarm::right_ip), std::ref(status));
     gripper_thread_left.join();
     gripper_thread_right.join();
 
-    std::cout << "done grasp_both " << " ";
+    std::cout << "done grasp_both " << std::endl;
+    return status;
 }
-void api_release_both () {
-    std::cout << "release_both " << " ";
+int api_release_both () {
+    int status = 0;
+    std::cout << "release_both "
+              << std::endl;
 
-    std::thread gripper_thread_left = std::thread(release, std::cref(dualarm::left_ip));
-    std::thread gripper_thread_right = std::thread(release, std::cref(dualarm::right_ip));
+    std::thread gripper_thread_left = std::thread(release, std::cref(dualarm::left_ip), std::ref(status));
+    std::thread gripper_thread_right = std::thread(release, std::cref(dualarm::right_ip), std::ref(status));
     gripper_thread_left.join();
     gripper_thread_right.join();
 
-    std::cout << "done release_both " << " ";
+    std::cout << "done release_both " << std::endl;
+    return status;
 }
-void api_init_both () {
-    std::cout << "init_both " << " ";
+int api_init_both () {
+    int status = 0;
+    std::cout << "init_both " << std::endl;
 
-    std::thread init_left = std::thread(init_one, std::cref(dualarm::left_ip));
-    std::thread init_right = std::thread(init_one, std::cref(dualarm::right_ip));
+    std::thread init_left = std::thread(init_one, std::cref(dualarm::left_ip), std::ref(status));
+    std::thread init_right = std::thread(init_one, std::cref(dualarm::right_ip), std::ref(status));
     init_left.join();
     init_right.join();
 
-    std::cout << "done init_both " << " ";
+    std::cout << "done init_both " << status <<  " ";
+    return status;
 }
 
 int main () {
@@ -121,54 +136,52 @@ int main () {
     // socket.bind ("ipc:///tmp/test");
 
     while (true) {
-      std::cout << "waiting for message"
-                << "\n";
-      // // receive a multi part message
-      // std::vector<zmq::message_t> request;
-      // while (true) {
-      //     zmq::message_t msg;
-      //     auto res = socket.recv(&msg);
-      //     request.push_back(msg);
-      //     if (!msg.more()) {
-      //         break;
-      //     }
-      // }
-
-      std::vector<zmq::message_t> request;
-      const auto ret = zmq::recv_multipart(socket, std::back_inserter(request));
-      if (!ret)
-        return 1;
-
-      std::string command = std::string(static_cast<char *>(request[0].data()), request[0].size());
-      if (command == "move_one")
-      {
-        std::string arm = std::string(static_cast<char *>(request[1].data()), request[1].size());
-        std::vector<double> traj = vector_from_message(request[2]);
-        api_move_one(arm, traj);
+        std::cout << "waiting for message"
+                << std::endl;
+    
+        std::vector<zmq::message_t> request;
+        const auto ret = zmq::recv_multipart(socket, std::back_inserter(request));
+        if (!ret) {
+            std::cout << "Malformed message" << std::endl;
+            continue;
+        }
+        int res = 0;
+        std::string command = std::string(static_cast<char *>(request[0].data()), request[0].size());
+        if (command == "init_both")
+        {
+            res = api_init_both();
+        }
+        else if (command == "move_one")
+        {
+            std::string arm = std::string(static_cast<char *>(request[1].data()), request[1].size());
+            std::vector<double> traj = vector_from_message(request[2]);
+            res = api_move_one(arm, traj);
         }
         else if (command == "move_both"){
             std::vector<double> left_traj = vector_from_message(request[1]);    
             std::vector<double> right_traj = vector_from_message(request[2]);
-            api_move_both(left_traj, right_traj);
+            res = api_move_both(left_traj, right_traj);
         }
         else if (command == "grasp_one") {
             std::string arm = std::string(static_cast<char*>(request[1].data()), request[1].size());
-            api_grasp_one(arm);
+            res = api_grasp_one(arm);
         }
         else if (command == "release_one") {
             std::string arm = std::string(static_cast<char*>(request[1].data()), request[1].size());
-            api_release_one(arm);
+            res = api_release_one(arm);
         }
         else if (command == "grasp_both"){
-            api_grasp_both();
+            res = api_grasp_both();
         }
         else if (command == "grasp_both"){
-            api_release_both();
+            res = api_release_both();
+        } else {
+            std::cout << "Unrecognized command: " << command << std::endl;
         }
 
         //  Send reply back to client
-        zmq::message_t reply (5);
-        memcpy ((void *) reply.data (), "World", 5);
+        zmq::message_t reply (1);
+        memcpy((void *) reply.data(), &res, sizeof(int));
         socket.send(reply);
     }
     return 0;

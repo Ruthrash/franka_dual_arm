@@ -15,52 +15,59 @@ namespace dualarm{
   std::array<double, 7> qinit = {0.0, -0.7, 0, -1.2, 0, 1.9, M_PI_4};
 }
 
-void catch_franka_error(std::string where_from) {
+void catch_franka_error(int &res, std::string where_from) {
     try{
+        res = 1;
         throw;
     }
     catch (franka::Exception const& e) {
-        std::cout << where_from << " : " << e.what() << std::endl;
+        std::cout << "exception! " << where_from << " : " << e.what() << std::endl;
+    } catch(std::exception const& e) {
+        std::cout  << "exception! " << where_from << " : " << e.what() << std::endl;
+    } catch(...) {
+        std::cout  << "exception! " << where_from << " : " << "unknown exception!" << std::endl;
     }
 }
 
-void init_one(std::string robot_ip) {
-    try {
+void init_one(std::string robot_ip, int &res) {
+    try
+    {
         franka::Robot robot(robot_ip);
         MotionGenerator motionGenerator(0.5, dualarm::qinit);
         robot.control(motionGenerator);
         franka::Gripper left_gripper(robot_ip);
         left_gripper.homing();
         left_gripper.move(0.08, 0.1);
-
-    } catch (...) {
-        catch_franka_error("init");
+    }
+    catch (...)
+    {
+        catch_franka_error(res, "init");
     }
 }
 
-void grasp (std::string robot_ip) {
+void grasp (std::string robot_ip, int &res) {
     try {
         franka::Gripper gripper(robot_ip);
         // assume homing already done?
         // gripper.homing();
         gripper.grasp(dualarm::grasp_width, 0.1, 80,0.005,0.005);
     } catch(...) {
-        catch_franka_error("grasp");
+        catch_franka_error(res, "grasp");
     }
 }
 
-void release (std::string robot_ip) {
+void release (std::string robot_ip, int &res) {
     try {
         franka::Gripper gripper(robot_ip);
         // assume homing already done?
         // gripper.homing();
         gripper.move(0.08, 0.1);
     } catch(...) {
-        catch_franka_error("release");
+        catch_franka_error(res, "release");
     }
 }
 
-void move(std::string robot_ip, std::vector<std::array<double, 7>> traj) {
+void move(std::string robot_ip, std::vector<std::array<double, 7>> traj, int &res) {
     try {
         franka::Robot robot(robot_ip);
         int time_step = 0;
@@ -78,6 +85,6 @@ void move(std::string robot_ip, std::vector<std::array<double, 7>> traj) {
             }
         });
     } catch(...) {
-        catch_franka_error("grasp");
+        catch_franka_error(res, "grasp");
     }
 }
