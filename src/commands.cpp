@@ -24,22 +24,15 @@ void catch_franka_error(std::string where_from) {
     }
 }
 
-void init() {
+void init_one(std::string robot_ip) {
     try {
-        franka::Robot robot_left(dualarm::left_ip);
-        MotionGenerator motionGenerator_left(0.5, dualarm::qinit);
-        robot_left.control(motionGenerator_left);
-        franka::Gripper left_gripper(dualarm::left_ip);
+        franka::Robot robot(robot_ip);
+        MotionGenerator motionGenerator(0.5, dualarm::qinit);
+        robot.control(motionGenerator);
+        franka::Gripper left_gripper(robot_ip);
         left_gripper.homing();
         left_gripper.move(0.08, 0.1);
 
-
-        franka::Robot robot_right(dualarm::right_ip);
-        MotionGenerator motionGenerator_right(0.5, dualarm::qinit);
-        robot_left.control(motionGenerator_right);
-        franka::Gripper right_gripper(dualarm::right_ip);
-        right_gripper.homing();
-        right_gripper.move(0.08, 0.1);
     } catch (...) {
         catch_franka_error("init");
     }

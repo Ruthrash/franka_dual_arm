@@ -102,6 +102,16 @@ void api_release_both () {
 
     std::cout << "done release_both " << " ";
 }
+void api_init_both () {
+    std::cout << "init_both " << " ";
+
+    std::thread init_left = std::thread(init_one, std::cref(dualarm::left_ip));
+    std::thread init_right = std::thread(init_one, std::cref(dualarm::right_ip));
+    init_left.join();
+    init_right.join();
+
+    std::cout << "done init_both " << " ";
+}
 
 int main () {
     //  Prepare our context and socket
