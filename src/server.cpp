@@ -127,7 +127,38 @@ int api_init_both () {
     std::cout << "done init_both " << status <<  " ";
     return status;
 }
+int api_get_conf(std::string arm, std::array<double, 7> &q) {
+    int status = 0;
+    std::cout << "get_conf " << arm << std::endl;
 
+    std::string robot_ip;
+    if (arm == "left_panda")
+        robot_ip = dualarm::left_ip;
+    else
+        robot_ip = dualarm::right_ip;
+
+    std::thread conf_thread = std::thread(get_conf, std::cref(robot_ip), std::ref(q), std::ref(status));
+    conf_thread.join();
+    
+    std::cout << "done get_conf " << status <<  " ";
+    return status;
+}
+int api_get_ee_in_base(std::string arm, std::array<double, 16> &X) {
+    int status = 0;
+    std::cout << "get_ee_in_base " << arm << std::endl;
+
+    std::string robot_ip;
+    if (arm == "left_panda")
+        robot_ip = dualarm::left_ip;
+    else
+        robot_ip = dualarm::right_ip;
+
+    std::thread conf_thread = std::thread(get_ee_in_base, std::cref(robot_ip), std::ref(X), std::ref(status));
+    conf_thread.join();
+    
+    std::cout << "done get_ee_in_base " << status <<  " ";
+    return status;
+}
 int main () {
     //  Prepare our context and socket
     zmq::context_t context (1);
@@ -150,7 +181,7 @@ int main () {
         if (command == ("ping")) {
             res = 0;
         }
-        if (command == "init_both")
+        else if (command == "init_both")
         {
             res = api_init_both();
         }
@@ -178,7 +209,36 @@ int main () {
         }
         else if (command == "grasp_both"){
             res = api_release_both();
-        } else {
+        } 
+        else if (command == "get_conf") {
+            std::string arm = std::string(static_cast<char*>(request[1].data()), request[1].size());
+            std::array<double, 7> q = {0, 0, 0, 0, 0, 0, 0};
+            res = api_get_conf(arm, q);
+
+            std::array<zmq::message_t, 2> send_msgs = {
+                zmq::message_t(&res, sizeof(int)),
+                zmq::message_t(&q, sizeof(double) * 7)
+            };
+
+            if (!zmq::send_multipart(socket, send_msgs))
+                return 1;
+            continue;
+        }
+        else if (command == "get_ee_in_base") {
+            std::string arm = std::string(static_cast<char*>(request[1].data()), request[1].size());
+            std::array<double, 16> X = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            res = api_get_ee_in_base(arm, X);
+
+            std::array<zmq::message_t, 2> send_msgs = {
+                zmq::message_t(&res, sizeof(int)),
+                zmq::message_t(&X, sizeof(double) * 16)
+            };
+
+            if (!zmq::send_multipart(socket, send_msgs))
+                return 1;
+            continue;
+        }
+        else {
             std::cout << "Unrecognized command: " << command << std::endl;
         }
 

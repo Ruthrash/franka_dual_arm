@@ -88,3 +88,26 @@ void move(std::string robot_ip, std::vector<std::array<double, 7>> traj, int &re
         catch_franka_error(res, "grasp");
     }
 }
+
+void get_conf(std::string robot_ip, std::array<double, 7> &q, int &res) {
+    try {
+        franka::Robot robot(robot_ip);
+        franka::RobotState state = robot.readOnce();
+        for (int i = 0; i <= 7; i ++) {
+            q[i] = state.q[i];
+        }
+    } catch(...) {
+        catch_franka_error(res, "grasp");
+    }
+}
+void get_ee_in_base(std::string robot_ip, std::array<double, 16> &X, int &res) {
+    try {
+        franka::Robot robot(robot_ip);
+        franka::RobotState state = robot.readOnce();
+        for (int i = 0; i <= 16; i ++) {
+            X[i] = state.O_T_EE[i];
+        }
+    } catch(...) {
+        catch_franka_error(res, "grasp");
+    }
+}
