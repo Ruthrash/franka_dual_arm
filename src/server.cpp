@@ -34,7 +34,7 @@ int api_move_one (std::string arm, std::vector<double> traj) {
 
     std::thread move_thread = std::thread(move, std::cref(robot_ip), std::cref(*traj_mat), std::ref(status));
     move_thread.join();
-    
+
     std::cout << "done move_one " << arm << std::endl;
     return status;
 
@@ -139,7 +139,7 @@ int api_get_conf(std::string arm, std::array<double, 7> &q) {
 
     std::thread conf_thread = std::thread(get_conf, std::cref(robot_ip), std::ref(q), std::ref(status));
     conf_thread.join();
-    
+
     std::cout << "done get_conf " << status <<  " ";
     return status;
 }
@@ -155,7 +155,7 @@ int api_get_ee_in_base(std::string arm, std::array<double, 16> &X) {
 
     std::thread conf_thread = std::thread(get_ee_in_base, std::cref(robot_ip), std::ref(X), std::ref(status));
     conf_thread.join();
-    
+
     std::cout << "done get_ee_in_base " << status <<  " ";
     return status;
 }
@@ -163,13 +163,13 @@ int main () {
     //  Prepare our context and socket
     zmq::context_t context (1);
     zmq::socket_t socket (context, ZMQ_REP);
-    socket.bind ("tcp://127.0.0.1:5555");
+    socket.bind ("tcp://0.0.0.0:5555");
     // socket.bind ("ipc:///tmp/test");
 
     while (true) {
         std::cout << "waiting for message"
                 << std::endl;
-    
+
         std::vector<zmq::message_t> request;
         const auto ret = zmq::recv_multipart(socket, std::back_inserter(request));
         if (!ret) {
@@ -192,7 +192,7 @@ int main () {
             res = api_move_one(arm, traj);
         }
         else if (command == "move_both"){
-            std::vector<double> left_traj = vector_from_message(request[1]);    
+            std::vector<double> left_traj = vector_from_message(request[1]);
             std::vector<double> right_traj = vector_from_message(request[2]);
             res = api_move_both(left_traj, right_traj);
         }
@@ -209,7 +209,7 @@ int main () {
         }
         else if (command == "grasp_both"){
             res = api_release_both();
-        } 
+        }
         else if (command == "get_conf") {
             std::string arm = std::string(static_cast<char*>(request[1].data()), request[1].size());
             std::array<double, 7> q = {0, 0, 0, 0, 0, 0, 0};

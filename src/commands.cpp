@@ -9,8 +9,8 @@
 #include "common.h"
 
 namespace dualarm{
-  double grasp_width = 0.025;
-  std::string left_ip = "192.168.2.107";
+  double grasp_width = 0.0499;
+  std::string left_ip = "192.168.1.107";
   std::string right_ip = "192.168.2.109";
   std::array<double, 7> qinit = {0.0, -0.7, 0, -1.2, 0, 1.9, M_PI_4};
 }
@@ -48,10 +48,14 @@ void init_one(std::string robot_ip, int &res) {
 void grasp (std::string robot_ip, int &res) {
     try {
         franka::Gripper gripper(robot_ip);
-        // assume homing already done?
-        // gripper.homing();
-        gripper.grasp(dualarm::grasp_width, 0.1, 80,0.005,0.005);
-    } catch(...) {
+        // assume homing already done
+        int result = gripper.grasp(dualarm::grasp_width, 0.1, 80,0.005,0.005);
+        if (result == 0) {
+            res = 1;
+        }
+    }
+    catch (...)
+    {
         catch_franka_error(res, "grasp");
     }
 }
@@ -84,8 +88,10 @@ void move(std::string robot_ip, std::vector<std::array<double, 7>> traj, int &re
                 return output;
             }
         });
-    } catch(...) {
-        catch_franka_error(res, "grasp");
+    }
+    catch (...)
+    {
+        catch_franka_error(res, "move");
     }
 }
 
@@ -93,21 +99,21 @@ void get_conf(std::string robot_ip, std::array<double, 7> &q, int &res) {
     try {
         franka::Robot robot(robot_ip);
         franka::RobotState state = robot.readOnce();
-        for (int i = 0; i <= 7; i ++) {
+        for (int i = 0; i < 7; i ++) {
             q[i] = state.q[i];
         }
     } catch(...) {
-        catch_franka_error(res, "grasp");
+        catch_franka_error(res, "get_conf");
     }
 }
 void get_ee_in_base(std::string robot_ip, std::array<double, 16> &X, int &res) {
     try {
         franka::Robot robot(robot_ip);
         franka::RobotState state = robot.readOnce();
-        for (int i = 0; i <= 16; i ++) {
+        for (int i = 0; i < 16; i ++) {
             X[i] = state.O_T_EE[i];
         }
     } catch(...) {
-        catch_franka_error(res, "grasp");
+        catch_franka_error(res, "get_ee_in_base");
     }
 }
